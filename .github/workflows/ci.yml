@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  release:
+    types:
+      - published
+
+jobs:
+  build:
+    name: Build Collection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install ansible-core
+        run: pip install ansible-core
+
+      - name: Build collection
+        run: ansible-galaxy collection build
+
+      - name: Upload collection artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: collection
+          path: '*.tar.gz'
+
+  publish:
+    name: Publish to Galaxy
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.event.release.tag_name, 'v')
+
+    # Required for OIDC token
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download collection artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: collection
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install ansible-core
+        run: pip install ansible-core
+
+      - name: Get OIDC token
+        id: oidc
+        run: |
+          # Exchange GitHub's OIDC token with correct audience
+          AUDIENCE=galaxy-jborean93.oidc.publisher
+          OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" | jq -r '.value')
+          echo "::add-mask::$OIDC_TOKEN"
+          echo "token=$OIDC_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Publish collection to Galaxy
+        run: |
+          ansible-galaxy collection publish *.tar.gz \
+            --server https://mezum3vzjm.us-east-1.awsapprunner.com \
+            --token ${{ steps.oidc.outputs.token }}
