@@ -74,5 +74,5 @@ jobs:
       - name: Publish collection to Galaxy
         run: |
           ansible-galaxy collection publish *.tar.gz \
-            --server https://mezum3vzjm.us-east-1.awsapprunner.com \
+            --server https://mezum3vzjm.us-east-1.awsapprunner.com/api/v1/galaxy \
             --token ${{ steps.oidc.outputs.token }}
